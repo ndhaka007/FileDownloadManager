@@ -10,15 +10,71 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
+	"time"
 )
 
 var (
-	i = 0
-	mp = make(map[string] Model.DownloadFile)
+	Mp = make(map[string] Model.Response)
 )
 
-func down(site string, j int){
+func HomePage(w http.ResponseWriter, r *http.Request){
+	w.Header().Set("Ok","200")
+	fmt.Fprintf(w,"Ok")
+	fmt.Println("Endpoint Hit: homePage")
+}
+
+func Download(w http.ResponseWriter, r *http.Request) {
+	//to generate uuid
+	uuid := generateUUID()
+
+	urlVsAdd := make(map[string]string)
+	t :=time.Now()
+	//read payload
+	reqBody, _ := ioutil.ReadAll(r.Body)
+	//convert to json
+	var file Model.Input
+	_ = json.Unmarshal(reqBody, &file)
+	if file.Type == "serial" {
+		se := Model.SerialDownload{Urls: file.Urls}
+
+		se.DownloadFile()
+
+		resp := Model.Response{Id: uuid, StartTime: t, EndTime: time.Now(), Status: "successful", DownloadType: file.Type, Files: urlVsAdd}
+		w.Header().Set("Content-Type", "application/json")
+		ret,_:=json.Marshal(resp.Id)
+		Mp[uuid] = resp
+		w.Write(ret)
+	}	else{
+		resp := Model.Response{Id: uuid, StartTime: t, EndTime: time.Now(), Status: "queue", DownloadType: file.Type, Files: urlVsAdd}
+		w.Header().Set("Content-Type", "application/json")
+		ret,_:=json.Marshal(resp.Id)
+		Mp[uuid] = resp
+		w.Write(ret)
+		 co := Model.ConDownload{Urls: file.Urls}
+
+		 co.DownloadFile()
+
+		resp.Status = "successful"
+		Mp[uuid] = resp
+	}
+}
+
+func Status(w http.ResponseWriter, r *http.Request){
+	id := parseURL(r.URL.Path)
+	w.Header().Set("Content-Type", "application/json")
+	ret,_:=json.Marshal(Mp[id])
+	w.Write(ret)
+}
+
+func (s Model.SerialDownload)DownloadFile(){
+
+}
+func (c Model.ConDownload)DownloadFile(){
+
+}
+
+func down(site string, urlVsAdd map[string]string, uuid string){
+	j:= generateUUID()
 	// don't worry about errors
 	response, e := http.Get(site)
 	if e != nil {
@@ -27,7 +83,7 @@ func down(site string, j int){
 	defer response.Body.Close()
 
 	//open a file for writing
-	file, err := os.Create("/tmp/"+strconv.Itoa(j)+".jpg")
+	file, err := os.Create("/tmp/"+uuid+"/"+j+".jpg")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -39,6 +95,7 @@ func down(site string, j int){
 		log.Fatal(err)
 	}
 	fmt.Println("Success!")
+	urlVsAdd[site]= "/tmp/"+uuid+"/"+j+".jpg"
 }
 
 func generateUUID() string{
@@ -52,55 +109,10 @@ func generateUUID() string{
 	return uuid
 }
 
-func HomePage(w http.ResponseWriter, r *http.Request){
-	w.Header().Set("Ok","200")
-	fmt.Fprintf(w,"Ok")
-	fmt.Println("Endpoint Hit: homePage")
-}
-
-
-func Download(w http.ResponseWriter, r *http.Request) {
-	//to generate uuid
-	uuid := generateUUID()
-	resp := Model.Response{uuid}
-	w.Header().Set("Content-Type", "application/json")
-	ret,_:=json.Marshal(resp)
-
-	//read payload
-	reqBody, _ := ioutil.ReadAll(r.Body)
-	//convert to json
-	var file Model.DownloadFile
-	_ = json.Unmarshal(reqBody, &file)
-	if file.Type == "serial" {
-		for _, link := range file.Urls {
-			down(link, i)
-			i++
-		}
-		w.Write(ret)
-	}	else{
-		w.Write(ret)
-
-		for _, link := range file.Urls {
-			down(link, i)
-			i++
-		}
-	}
-	mp[uuid] = file
-
-}
-
 func parseURL(url string) string{
 	var s = ""
 	for i:=len(url)-1;url[i]!='/';i--{
 		s=string(url[i])+s
 	}
 	return s
-}
-
-func Status(w http.ResponseWriter, r *http.Request){
-	id := parseURL(r.URL.Path)
-	w.Header().Set("Content-Type", "application/json")
-	ret,_:=json.Marshal(mp[id])
-	w.Write(ret)
-
 }
