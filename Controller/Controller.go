@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/ndhaka007/FileDownloadManager/Model"
-	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
 	"time"
 )
 
@@ -37,7 +35,7 @@ func Download(w http.ResponseWriter, r *http.Request) {
 	if file.Type == "serial" {
 		se := Model.SerialDownload{Urls: file.Urls}
 
-		se.DownloadFile()
+		se.DownloadFile(urlVsAdd,uuid)
 
 		resp := Model.Response{Id: uuid, StartTime: t, EndTime: time.Now(), Status: "successful", DownloadType: file.Type, Files: urlVsAdd}
 		w.Header().Set("Content-Type", "application/json")
@@ -52,7 +50,7 @@ func Download(w http.ResponseWriter, r *http.Request) {
 		w.Write(ret)
 		 co := Model.ConDownload{Urls: file.Urls}
 
-		 co.DownloadFile()
+		 co.DownloadFile(urlVsAdd,uuid)
 
 		resp.Status = "successful"
 		Mp[uuid] = resp
@@ -64,38 +62,6 @@ func Status(w http.ResponseWriter, r *http.Request){
 	w.Header().Set("Content-Type", "application/json")
 	ret,_:=json.Marshal(Mp[id])
 	w.Write(ret)
-}
-
-func (s Model.SerialDownload)DownloadFile(){
-
-}
-func (c Model.ConDownload)DownloadFile(){
-
-}
-
-func down(site string, urlVsAdd map[string]string, uuid string){
-	j:= generateUUID()
-	// don't worry about errors
-	response, e := http.Get(site)
-	if e != nil {
-		log.Fatal(e)
-	}
-	defer response.Body.Close()
-
-	//open a file for writing
-	file, err := os.Create("/tmp/"+uuid+"/"+j+".jpg")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer file.Close()
-
-	// Use io.Copy to just dump the response body to the file. This supports huge files
-	_, err = io.Copy(file, response.Body)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println("Success!")
-	urlVsAdd[site]= "/tmp/"+uuid+"/"+j+".jpg"
 }
 
 func generateUUID() string{
