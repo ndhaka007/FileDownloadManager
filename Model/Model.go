@@ -11,7 +11,7 @@ import(
 )
 
 type Download interface{
-	DownloadFile()
+	DownloadFile()error
 }
 
 type SerialDownload struct{
@@ -36,15 +36,54 @@ type Response struct{
 	Files map[string]string
 }
 
-func (s SerialDownload)DownloadFile(urlVsAdd map[string]string,uuid string){
+func (s SerialDownload)DownloadFile(urlVsAdd map[string]string,uuid string)error{
+	_ = os.MkdirAll("/tmp/"+uuid,os.ModePerm)
 	for _,link := range s.Urls{
-		down(link,urlVsAdd ,uuid)
+		j:= generateUUID()
+		// don't worry about errors
+		response, e := http.Get(link)
+		if e != nil {
+			fmt.Println(e)
+			return e
+		}
+		defer response.Body.Close()
+
+		//open a file for writing
+		file, err := os.Create("/tmp/"+uuid+"/"+j)
+		if err != nil {
+			//log.Fatal(err)
+			return err
+		}
+		defer file.Close()
+
+		// Use io.Copy to just dump the response body to the file. This supports huge files
+		_, err = io.Copy(file, response.Body)
+		if err != nil {
+			//log.Fatal(err)
+			return err
+		}
+		fmt.Println("Success!")
+		urlVsAdd[link]= "/tmp/"+uuid+"/"+j
 	}
+	return nil
 }
-func (c ConDownload)DownloadFile(urlVsAdd map[string]string,uuid string){
-	for _,link := range c.Urls{
-		down(link,urlVsAdd ,uuid)
+
+
+func (c ConDownload)DownloadFile(urlVsAdd map[string]string,uuid string, resp *Response)error{
+
+	concurrency := 6
+	req := make(chan string, concurrency)
+
+	for i:=0;i<concurrency;i++{
+		go concurrent(req,len(c.Urls), 0, urlVsAdd ,uuid, resp)
 	}
+	go func() {
+		for _, link := range c.Urls {
+			req <- link
+		}
+		fmt.Println("z")
+	}()
+	return nil
 }
 
 func generateUUID() string{
@@ -58,17 +97,17 @@ func generateUUID() string{
 	return uuid
 }
 
-func down(site string, urlVsAdd map[string]string, uuid string){
+func condown(site string, urlVsAdd map[string]string, uuid string){
 	j:= generateUUID()
 	// don't worry about errors
 	response, e := http.Get(site)
 	if e != nil {
-		log.Fatal(e)
+		fmt.Println(e)
 	}
 	defer response.Body.Close()
 	_ = os.MkdirAll("/tmp/"+uuid,os.ModePerm)
 	//open a file for writing
-	file, err := os.Create("/tmp/"+uuid+"/"+j+".jpg")
+	file, err := os.Create("/tmp/"+uuid+"/"+j)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -80,5 +119,24 @@ func down(site string, urlVsAdd map[string]string, uuid string){
 		log.Fatal(err)
 	}
 	fmt.Println("Success!")
-	urlVsAdd[site]= "/tmp/"+uuid+"/"+j+".jpg"
+	urlVsAdd[site]= "/tmp/"+uuid+"/"+j
+}
+
+func concurrent(reqChan chan string,total int, comp int,urlVsAdd map[string]string,uuid string, resp *Response) {
+	for {
+		select {
+		case link, ok := <-reqChan:
+			if !ok{
+				return
+			}
+			condown(link, urlVsAdd, uuid)
+		}
+		if len(urlVsAdd)==total {
+			close(reqChan)
+			resp.Status = "successful"
+			resp.EndTime = time.Now()
+			return
+		}
+
+	}
 }
