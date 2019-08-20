@@ -19,7 +19,6 @@ var (
 func HomePage(w http.ResponseWriter, r *http.Request){
 	w.Header().Set("Ok","200")
 	_, _ = fmt.Fprintf(w, "Ok")
-	fmt.Println("Endpoint Hit: homePage")
 }
 
 //API to download files
@@ -59,12 +58,10 @@ func Download(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(ret)
 
 		 co := Model.ConDownload{Urls: file.Urls}
-		 _ = co.DownloadFile(urlVsAdd,uuid,resp)
-		 //response data updated
-		//resp.Status = "successful"
-		//if e != nil {
-		//	resp.Status = "failed"
-		//}
+		 e := co.DownloadFile(urlVsAdd,uuid,resp)
+		if e != nil {
+			resp.Status = "failed"
+		}
 		Mp[uuid] = resp
 	}
 }

@@ -39,47 +39,51 @@ type Response struct{
 func (s SerialDownload)DownloadFile(urlVsAdd map[string]string,uuid string)error{
 	_ = os.MkdirAll("/tmp/"+uuid,os.ModePerm)
 	for _,link := range s.Urls{
-		j:= generateUUID()
-		// don't worry about errors
-		response, e := http.Get(link)
-		if e != nil {
-			fmt.Println(e)
-			return e
-		}
-		defer response.Body.Close()
+		if _, ok := urlVsAdd[link]; !ok {
+			j := generateUUID()
+			// don't worry about errors
+			response, e := http.Get(link)
+			if e != nil {
+				fmt.Println(e)
+				return e
+			}
+			defer response.Body.Close()
 
-		//open a file for writing
-		file, err := os.Create("/tmp/"+uuid+"/"+j)
-		if err != nil {
-			//log.Fatal(err)
-			return err
-		}
-		defer file.Close()
+			//open a file for writing
+			file, err := os.Create("/tmp/" + uuid + "/" + j)
+			if err != nil {
+				//log.Fatal(err)
+				return err
+			}
+			defer file.Close()
 
-		// Use io.Copy to just dump the response body to the file. This supports huge files
-		_, err = io.Copy(file, response.Body)
-		if err != nil {
-			//log.Fatal(err)
-			return err
+			// Use io.Copy to just dump the response body to the file. This supports huge files
+			_, err = io.Copy(file, response.Body)
+			if err != nil {
+				//log.Fatal(err)
+				return err
+			}
+			fmt.Println("Success!")
+			urlVsAdd[link] = "/tmp/" + uuid + "/" + j
 		}
-		fmt.Println("Success!")
-		urlVsAdd[link]= "/tmp/"+uuid+"/"+j
 	}
 	return nil
 }
 
 
 func (c ConDownload)DownloadFile(urlVsAdd map[string]string,uuid string, resp *Response)error{
-
 	concurrency := 6
 	req := make(chan string, concurrency)
-
+	set := make(map[string]bool)
+	for _, i := range c.Urls{
+		set[i] = true
+	}
 	for i:=0;i<concurrency;i++{
-		go concurrent(req,len(c.Urls), 0, urlVsAdd ,uuid, resp)
+		go concurrent(req,len(set), 0, urlVsAdd ,uuid, resp)
 	}
 	go func() {
-		for _, link := range c.Urls {
-			req <- link
+		for link := range set {
+				req <- link
 		}
 		fmt.Println("z")
 	}()
@@ -137,6 +141,5 @@ func concurrent(reqChan chan string,total int, comp int,urlVsAdd map[string]stri
 			resp.EndTime = time.Now()
 			return
 		}
-
 	}
 }
